@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>Manzar — Stream Movies &amp; Shows Free on Android | Movie App</title>
+  <meta name="description" content="Manzar is a free movie streaming app for Android. Watch thousands of movies and TV shows, download to watch offline, and get new releases every week. Download the APK free — no account needed." />
+  <link rel="canonical" href="https://manzaronline.site/" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="author" content="Manzar" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-title" content="Manzar" />
+
+  <!-- Open Graph (Facebook, WhatsApp, LinkedIn, etc.) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Manzar" />
+  <meta property="og:title" content="Manzar — Stream Movies &amp; Shows Free on Android" />
+  <meta property="og:description" content="Watch thousands of movies and TV shows, download to watch offline, and get new releases every week. Free Android app — no account needed." />
+  <meta property="og:url" content="https://manzaronline.site/" />
+  <meta property="og:image" content="https://manzaronline.site/assets/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Manzar — unlimited movies, right in your pocket" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Manzar — Stream Movies &amp; Shows Free on Android" />
+  <meta name="twitter:description" content="Thousands of movies and shows. Watch offline. Free Android app — no account needed." />
+  <meta name="twitter:image" content="https://manzaronline.site/assets/og-image.png" />
+  <meta name="twitter:image:alt" content="Manzar movie app on a phone" />
+
+  <!-- Icons & manifest -->
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Structured data: the app itself -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MobileApplication",
+    "name": "Manzar",
+    "operatingSystem": "Android",
+    "applicationCategory": "EntertainmentApplication",
+    "description": "Free movie streaming app for Android. Watch thousands of movies and TV shows, download to watch offline, and discover new releases weekly.",
+    "url": "https://manzaronline.site/",
+    "downloadUrl": "https://manzaronline.site/download",
+    "installUrl": "https://manzaronline.site/download",
+    "image": "https://manzaronline.site/assets/og-image.png",
+    "screenshot": "https://manzaronline.site/assets/phone-mockup.png",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Manzar",
+      "url": "https://manzaronline.site/"
+    }
+  }
+  </script>
+
+  <!-- Structured data: FAQ (mirrors the on-page FAQ) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I install the Manzar app?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Tap \"Download for Android\", open the downloaded .apk file, and allow installs from your browser if prompted. That's it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Manzar available on iPhone?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Not yet — the Android app is available now, with iOS on the way."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Manzar cost anything?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The app is free to download. Just install and start watching."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+
+  <!-- ===== Navbar ===== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a href="#" class="logo">MAN<span>ZAR</span></a>
+
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="#features">Features</a>
+        <a href="#faq">FAQ</a>
+        <a href="/download" class="btn btn-primary btn-sm">Download App</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+  <!-- ===== Hero ===== -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="container hero-inner">
+      <!-- Left: phone mockup -->
+      <div class="hero-visual">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <!-- Drop your real screenshot at assets/phone-mockup.png; the img falls back to the CSS frame if missing -->
+          <img src="assets/phone-mockup.png"
+               alt="Manzar movie app home screen showing featured films and trending titles"
+               class="phone-screen" width="900" height="1870"
+               fetchpriority="high" decoding="async"
+               onerror="this.style.display='none'" />
+        </div>
+      </div>
+
+      <!-- Right: headline + CTA -->
+      <div class="hero-copy">
+        <div class="download-badge" id="downloadBadge" hidden>
+          <span class="badge-dot"></span>
+          <strong id="downloadCount">0</strong>&nbsp;downloads and counting
+        </div>
+        <h1 id="hero-title">Unlimited movies,<br />right in your pocket.</h1>
+        <p class="hero-sub">
+          Stream thousands of movies and shows anytime, anywhere. Download once,
+          watch offline, and never miss a new release. Get the Manzar Android app free.
+        </p>
+        <a href="/download" class="btn btn-primary btn-lg">
+          <span class="btn-icon" aria-hidden="true">&#8681;</span>
+          Download for Android
+        </a>
+        <p class="hero-note">Free &bull; No account needed &bull; Android APK</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Features ===== -->
+  <section class="features" id="features" aria-labelledby="features-title">
+    <div class="container">
+      <h2 class="section-title" id="features-title">Why you'll love Manzar</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#127909;</div>
+          <h3>Watch anywhere</h3>
+          <p>Your library travels with you — on the couch, the commute, or 30,000 feet up.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#11015;</div>
+          <h3>Download &amp; go offline</h3>
+          <p>Save movies to your device and keep watching with zero signal.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127916;</div>
+          <h3>Thousands of titles</h3>
+          <p>Blockbusters, classics, and hidden gems across every genre you love.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#10024;</div>
+          <h3>Something new weekly</h3>
+          <p>Fresh releases added every week, so there's always more to discover.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Download CTA band ===== -->
+  <section class="cta-band" id="download">
+    <div class="container cta-inner">
+      <h2>Ready to start watching?</h2>
+      <p>Install Manzar on your Android device in seconds.</p>
+      <a href="/download" class="btn btn-primary btn-lg">
+        <span class="btn-icon" aria-hidden="true">&#8681;</span>
+        Download for Android
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== Email signup ===== -->
+  <section class="signup" id="signup">
+    <div class="container signup-inner">
+      <h2>Get notified about new releases</h2>
+      <p>Drop your email and we'll let you know when fresh titles and the iOS app land.</p>
+      <form class="signup-form" id="signupForm" novalidate>
+        <input type="email" id="signupEmail" name="email" placeholder="you@example.com"
+               autocomplete="email" required />
+        <button type="submit" class="btn btn-primary btn-lg">Notify me</button>
+      </form>
+      <p class="signup-msg" id="signupMsg" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section class="faq" id="faq" aria-labelledby="faq-title">
+    <div class="container">
+      <h2 class="section-title" id="faq-title">Frequently asked questions</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>How do I install the app?</summary>
+          <p>Tap "Download for Android", open the downloaded .apk file, and allow
+             installs from your browser if prompted. That's it.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is it available on iPhone?</summary>
+          <p>Not yet — the Android app is available now, with iOS on the way.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does it cost anything?</summary>
+          <p>The app is free to download. Just install and start watching.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+  <!-- ===== Footer ===== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <a href="#" class="logo">MAN<span>ZAR</span></a>
+      <p class="footer-copy">&copy; 2026 Manzar. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="#features">Features</a>
+        <a href="#faq">FAQ</a>
+        <a href="/download">Download</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

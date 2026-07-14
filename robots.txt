@@ -1,0 +1,10 @@
+# Manzar — robots.txt
+
+User-agent: *
+Allow: /
+
+# Keep the admin area and raw data out of search results
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://manzaronline.site/sitemap.xml
