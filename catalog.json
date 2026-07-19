@@ -1,0 +1,260 @@
+{
+  "generated_at": "2026-07-18T20:49:31.336Z",
+  "note": "Showcase catalog of freely-available / public-domain content. Streams are served by the Xtream server, not this landing page.",
+  "live": [
+    {
+      "stream_id": 1,
+      "name": "NASA TV Public",
+      "category": "Science & Space",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg",
+      "url": "https://ntv1.akamaihd.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8",
+      "ext": "m3u8",
+      "source": "Free-to-air"
+    },
+    {
+      "stream_id": 2,
+      "name": "Red Bull TV",
+      "category": "Sports & Action",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/f/f2/Red_Bull_TV_logo.png",
+      "url": "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8",
+      "ext": "m3u8",
+      "source": "Free-to-air"
+    },
+    {
+      "stream_id": 3,
+      "name": "DW English",
+      "category": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Deutsche_Welle_symbol_2012.svg",
+      "url": "https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8",
+      "ext": "m3u8",
+      "source": "Free-to-air"
+    },
+    {
+      "stream_id": 4,
+      "name": "France 24 English",
+      "category": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/8/842/FRANCE_24_logo.svg",
+      "url": "https://static.france24.com/live/F24_EN_HI_HLS/live_web.m3u8",
+      "ext": "m3u8",
+      "source": "Free-to-air"
+    },
+    {
+      "stream_id": 5,
+      "name": "Al Jazeera English",
+      "category": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/f/f2/Aljazeera_eng.svg",
+      "url": "https://live-hls-web-aje.getaj.net/AJE/index.m3u8",
+      "ext": "m3u8",
+      "source": "Free-to-air"
+    },
+    {
+      "stream_id": 6,
+      "name": "Bloomberg TV",
+      "category": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/5/57/Bloomberg_Television_2016.svg",
+      "url": "https://bloomberg-bloombergtv-1-eu.rakuten.wurl.tv/playlist.m3u8",
+      "ext": "m3u8",
+      "source": "Free-to-air"
+    }
+  ],
+  "movies": [
+    {
+      "stream_id": 1000,
+      "name": "Charlie Chaplin Festival (1938)",
+      "title": "Charlie Chaplin Festival",
+      "year": 1938,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/charlie_chaplin_film_fest",
+      "url": "https://archive.org/download/charlie_chaplin_film_fest/charlie_chaplin_film_fest.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1001,
+      "name": "The Fast And The Furious (1955)",
+      "title": "The Fast And The Furious",
+      "year": 1955,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/TheFastandtheFuriousJohnIreland1954goofyrip",
+      "url": "https://archive.org/download/TheFastandtheFuriousJohnIreland1954goofyrip/TheFastandtheFuriousJohnIreland1954goofyrip.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1002,
+      "name": "Return of the Kung Fu Dragon (1976)",
+      "title": "Return of the Kung Fu Dragon",
+      "year": 1976,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/Return_of_the_Kung_Fu_Dragon",
+      "url": "https://archive.org/download/Return_of_the_Kung_Fu_Dragon/Return_of_the_Kung_Fu_Dragon_512kb.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1003,
+      "name": "His Girl Friday (1940)",
+      "title": "His Girl Friday",
+      "year": 1940,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/his_girl_friday",
+      "url": "https://archive.org/download/his_girl_friday/his_girl_friday.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1004,
+      "name": "Voyage to the Planet of Prehistoric Women (1967)",
+      "title": "Voyage to the Planet of Prehistoric Women",
+      "year": 1967,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/VoyagetothePlanetofPrehistoricWomen",
+      "url": "https://archive.org/download/VoyagetothePlanetofPrehistoricWomen/VoyagetothePlanetofPrehistoricWomen.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1005,
+      "name": "House on Haunted Hill (1959)",
+      "title": "House on Haunted Hill",
+      "year": 1959,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/house_on_haunted_hill_ipod",
+      "url": "https://archive.org/download/house_on_haunted_hill_ipod/house_on_haunted_hill_512kb.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1006,
+      "name": "Jungle Book (1942)",
+      "title": "Jungle Book",
+      "year": 1942,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/JungleBook",
+      "url": "https://archive.org/download/JungleBook/Jungle_Book.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1007,
+      "name": "Sita Sings the Blues (2008)",
+      "title": "Sita Sings the Blues",
+      "year": 2008,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/Sita_Sings_the_Blues",
+      "url": "https://archive.org/download/Sita_Sings_the_Blues/Sita_Sings_the_Blues_1080p.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1008,
+      "name": "Utopia (1951)",
+      "title": "Utopia",
+      "year": 1951,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/utopia",
+      "url": "https://archive.org/download/utopia/Utopia_512kb.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1009,
+      "name": "The Pied Piper of Hamelin (1957)",
+      "title": "The Pied Piper of Hamelin",
+      "year": 1957,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/The_Pied_Piper_of_Hamelin",
+      "url": "https://archive.org/download/The_Pied_Piper_of_Hamelin/pied.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1010,
+      "name": "Escape From Sobibor (1987)",
+      "title": "Escape From Sobibor",
+      "year": 1987,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/Escape_From_Sobibor.avi",
+      "url": "https://archive.org/download/Escape_From_Sobibor.avi/Escape_from_Sobibor.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1011,
+      "name": "Abraham Lincoln (1930)",
+      "title": "Abraham Lincoln",
+      "year": 1930,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/abraham_lincoln",
+      "url": "https://archive.org/download/abraham_lincoln/abraham_lincoln.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1012,
+      "name": "Dressed To Kill (1946)",
+      "title": "Dressed To Kill",
+      "year": 1946,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/dressed_to_kill",
+      "url": "https://archive.org/download/dressed_to_kill/dressed_to_kill.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1013,
+      "name": "Three Stooges Episodes",
+      "title": "Three Stooges Episodes",
+      "year": null,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/3stooges",
+      "url": "https://archive.org/download/3stooges/3stooges_NewApants2.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1014,
+      "name": "Suddenly (1954)",
+      "title": "Suddenly",
+      "year": 1954,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/suddenly",
+      "url": "https://archive.org/download/suddenly/suddenly.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1015,
+      "name": "Recurring Dinosaur Infestation Films",
+      "title": "Recurring Dinosaur Infestation Films",
+      "year": null,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/RecurringDinosaurInfestationFilms",
+      "url": "https://archive.org/download/RecurringDinosaurInfestationFilms/23.Godzilla1998.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1016,
+      "name": "The Stranger (1946)",
+      "title": "The Stranger",
+      "year": 1946,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/TheStranger_0",
+      "url": "https://archive.org/download/TheStranger_0/The_Stranger.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    },
+    {
+      "stream_id": 1017,
+      "name": "Tarzan's Revenge (1938)",
+      "title": "Tarzan's Revenge",
+      "year": 1938,
+      "category": "Public Domain Films",
+      "poster": "https://archive.org/services/img/tarzans_revenge",
+      "url": "https://archive.org/download/tarzans_revenge/tarzans_revenge.mp4",
+      "ext": "mp4",
+      "source": "Internet Archive"
+    }
+  ]
+}

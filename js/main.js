@@ -1,82 +1,90 @@
-// ===== Manzar landing page — vanilla JS =====
+// ===== Manzar storefront — vanilla JS =====
 
-// 1) Solid navbar background once the user scrolls
+// ---- 1) Navbar background on scroll
 const navbar = document.getElementById('navbar');
-const onScroll = () => {
-  navbar.classList.toggle('scrolled', window.scrollY > 50);
-};
+const onScroll = () => navbar.classList.toggle('scrolled', window.scrollY > 50);
 window.addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 
-// 2) Mobile hamburger menu toggle
+// ---- 2) Mobile hamburger menu
 const navToggle = document.getElementById('navToggle');
 const navLinks = document.getElementById('navLinks');
-
 navToggle.addEventListener('click', () => {
   const isOpen = navLinks.classList.toggle('open');
   navToggle.setAttribute('aria-expanded', String(isOpen));
 });
-
-// Close the mobile menu after tapping any link inside it
-navLinks.querySelectorAll('a').forEach((link) => {
+navLinks.querySelectorAll('a').forEach((link) =>
   link.addEventListener('click', () => {
     navLinks.classList.remove('open');
     navToggle.setAttribute('aria-expanded', 'false');
+  })
+);
+
+// ---- Shared state
+let SERVER_URL = '';
+
+// ---- 3) Load config (server URL to display in the setup section)
+fetch('/api/config')
+  .then((r) => r.json())
+  .then((cfg) => {
+    SERVER_URL = cfg.server_url || '';
+    document.getElementById('serverUrl').textContent = SERVER_URL;
+  })
+  .catch(() => {
+    document.getElementById('serverUrl').textContent = 'unavailable — is the server running?';
+  });
+
+// ---- 4) Copy server URL
+document.getElementById('copyServer').addEventListener('click', () => {
+  navigator.clipboard?.writeText(SERVER_URL).then(() => {
+    const b = document.getElementById('copyServer');
+    const old = b.textContent;
+    b.textContent = 'Copied!';
+    setTimeout(() => (b.textContent = old), 1500);
   });
 });
 
-// 3) Live download-count badge in the hero
-const badge = document.getElementById('downloadBadge');
-const countEl = document.getElementById('downloadCount');
-
-fetch('/api/stats')
-  .then((res) => res.json())
-  .then(({ downloads }) => {
-    if (typeof downloads === 'number' && downloads > 0) {
-      countEl.textContent = downloads.toLocaleString();
-      badge.hidden = false;
-    }
-  })
-  .catch(() => { /* backend not running — leave badge hidden */ });
-
-// 4) Email signup form
-const signupForm = document.getElementById('signupForm');
-const signupEmail = document.getElementById('signupEmail');
-const signupMsg = document.getElementById('signupMsg');
-
-signupForm.addEventListener('submit', async (e) => {
+// ---- 5) Request to join
+const joinForm = document.getElementById('joinForm');
+joinForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = signupEmail.value.trim();
+  const msg = document.getElementById('joinMsg');
+  const name = document.getElementById('joinName').value.trim();
+  const email = document.getElementById('joinEmail').value.trim();
+  const note = document.getElementById('joinNote').value.trim();
+  msg.className = 'form-msg';
 
-  signupMsg.className = 'signup-msg';
+  if (!name) {
+    msg.textContent = 'Please enter your name.';
+    msg.classList.add('error');
+    return;
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    signupMsg.textContent = 'Please enter a valid email address.';
-    signupMsg.classList.add('error');
+    msg.textContent = 'Please enter a valid email address.';
+    msg.classList.add('error');
     return;
   }
 
-  const btn = signupForm.querySelector('button');
+  const btn = joinForm.querySelector('button');
   btn.disabled = true;
-
   try {
-    const res = await fetch('/api/signup', {
+    const res = await fetch('/api/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ name, email, note }),
     });
     const data = await res.json();
-
     if (res.ok) {
-      signupMsg.textContent = data.message || "You're on the list! We'll be in touch.";
-      signupMsg.classList.add('ok');
-      signupForm.reset();
+      joinForm.reset();
+      msg.textContent = data.message || "Thanks! Your request is in — we'll be in touch by email.";
+      msg.classList.add('ok');
     } else {
-      signupMsg.textContent = data.error || 'Something went wrong. Please try again.';
-      signupMsg.classList.add('error');
+      msg.textContent = data.error || 'Something went wrong. Please try again.';
+      msg.classList.add('error');
     }
   } catch {
-    signupMsg.textContent = 'Could not reach the server. Please try again later.';
-    signupMsg.classList.add('error');
+    msg.textContent = 'Could not reach the server. Please try again.';
+    msg.classList.add('error');
   } finally {
     btn.disabled = false;
   }

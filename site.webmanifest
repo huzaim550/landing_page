@@ -1,7 +1,7 @@
 {
-  "name": "Manzar — Movies & Shows",
+  "name": "Manzar — Xtream IPTV",
   "short_name": "Manzar",
-  "description": "Free movie streaming app for Android. Thousands of movies and shows, download to watch offline.",
+  "description": "Xtream Codes IPTV line for public-domain movies and free-to-air live TV. Works with any Xtream player.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0b0b",

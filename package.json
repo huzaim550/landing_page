@@ -1,12 +1,13 @@
 {
   "name": "manzar-landing",
   "version": "1.0.0",
-  "description": "Landing page + Express backend for the Manzar movie app",
+  "description": "Landing + billing storefront for the Manzar Xtream IPTV service (public-domain movies & free-to-air live TV)",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "build:catalog": "node scripts/build-catalog.js"
   },
   "dependencies": {
     "express": "^4.21.2"
