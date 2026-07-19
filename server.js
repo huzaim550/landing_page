@@ -194,145 +194,145 @@ app.post('/api/request', async (req, res) => {
 });
 
 // Subscribe -> create a PENDING line. Returns the customer's Xtream credentials.
-app.post('/api/subscribe', (req, res) => {
-  const email = String(req.body?.email || '').trim().toLowerCase();
-  const planId = String(req.body?.plan || '').trim();
-  const plan = planById(planId);
+// app.post('/api/subscribe', (req, res) => {
+//   const email = String(req.body?.email || '').trim().toLowerCase();
+//   const planId = String(req.body?.plan || '').trim();
+//   const plan = planById(planId);
 
-  if (!EMAIL_RE.test(email)) {
-    return res.status(400).json({ error: 'Please enter a valid email address.' });
-  }
-  if (!plan) {
-    return res.status(400).json({ error: 'Please choose a valid plan.' });
-  }
+//   if (!EMAIL_RE.test(email)) {
+//     return res.status(400).json({ error: 'Please enter a valid email address.' });
+//   }
+//   if (!plan) {
+//     return res.status(400).json({ error: 'Please choose a valid plan.' });
+//   }
 
-  const accounts = readAccounts();
+//   const accounts = readAccounts();
 
-  // Auto-generate a unique username + password (Xtream "line").
-  let username;
-  do {
-    username = `mz_${randId(6)}`;
-  } while (accounts.some((a) => a.username === username));
-  const password = randId(10);
+//   // Auto-generate a unique username + password (Xtream "line").
+//   let username;
+//   do {
+//     username = `mz_${randId(6)}`;
+//   } while (accounts.some((a) => a.username === username));
+//   const password = randId(10);
 
-  const acc = {
-    username,
-    password,
-    email,
-    plan: plan.id,
-    status: 'pending',
-    exp_date: 0,
-    max_connections: plan.connections || 1,
-    created_at: nowSec(),
-  };
-  accounts.push(acc);
-  writeAccounts(accounts);
+//   const acc = {
+//     username,
+//     password,
+//     email,
+//     plan: plan.id,
+//     status: 'pending',
+//     exp_date: 0,
+//     max_connections: plan.connections || 1,
+//     created_at: nowSec(),
+//   };
+//   accounts.push(acc);
+//   writeAccounts(accounts);
 
-  res.json({
-    message: 'Line created. Redeem your activation code (or pay to receive one) to go live.',
-    account: publicAccount(acc),
-    plan,
-  });
-});
+//   res.json({
+//     message: 'Line created. Redeem your activation code (or pay to receive one) to go live.',
+//     account: publicAccount(acc),
+//     plan,
+//   });
+// });
 
-// Redeem an activation code -> mark the line Active and extend expiry.
-app.post('/api/redeem', (req, res) => {
-  const username = String(req.body?.username || '').trim();
-  const code = String(req.body?.code || '').trim().toUpperCase();
+// // Redeem an activation code -> mark the line Active and extend expiry.
+// app.post('/api/redeem', (req, res) => {
+//   const username = String(req.body?.username || '').trim();
+//   const code = String(req.body?.code || '').trim().toUpperCase();
 
-  const accounts = readAccounts();
-  const acc = accounts.find((a) => a.username === username);
-  if (!acc) {
-    return res.status(404).json({ error: 'No line found for that username.' });
-  }
+//   const accounts = readAccounts();
+//   const acc = accounts.find((a) => a.username === username);
+//   if (!acc) {
+//     return res.status(404).json({ error: 'No line found for that username.' });
+//   }
 
-  const codes = readCodes();
-  const entry = codes.find((c) => c.code === code);
-  if (!entry) {
-    return res.status(400).json({ error: 'Invalid activation code.' });
-  }
-  if (entry.used_by) {
-    return res.status(400).json({ error: 'This activation code has already been used.' });
-  }
+//   const codes = readCodes();
+//   const entry = codes.find((c) => c.code === code);
+//   if (!entry) {
+//     return res.status(400).json({ error: 'Invalid activation code.' });
+//   }
+//   if (entry.used_by) {
+//     return res.status(400).json({ error: 'This activation code has already been used.' });
+//   }
 
-  // Extend from the later of "now" or the current expiry (stacking).
-  const base = Math.max(nowSec(), acc.exp_date || 0);
-  acc.exp_date = base + entry.days * 86400;
-  acc.status = 'active';
-  entry.used_by = username;
-  entry.used_at = nowSec();
+//   // Extend from the later of "now" or the current expiry (stacking).
+//   const base = Math.max(nowSec(), acc.exp_date || 0);
+//   acc.exp_date = base + entry.days * 86400;
+//   acc.status = 'active';
+//   entry.used_by = username;
+//   entry.used_at = nowSec();
 
-  writeAccounts(accounts);
-  writeCodes(codes);
+//   writeAccounts(accounts);
+//   writeCodes(codes);
 
-  res.json({
-    message: `Activated! Your line is live for ${entry.days} more day(s).`,
-    account: publicAccount(acc),
-  });
-});
+//   res.json({
+//     message: `Activated! Your line is live for ${entry.days} more day(s).`,
+//     account: publicAccount(acc),
+//   });
+// });
 
-// Check the status of an existing line.
-app.get('/api/account', (req, res) => {
-  const username = String(req.query.username || '').trim();
-  const password = String(req.query.password || '').trim();
-  const accounts = readAccounts();
-  const acc = accounts.find((a) => a.username === username && a.password === password);
-  if (!acc) {
-    return res.status(404).json({ error: 'Line not found. Check your username and password.' });
-  }
-  res.json({ account: publicAccount(acc) });
-});
+// // Check the status of an existing line.
+// app.get('/api/account', (req, res) => {
+//   const username = String(req.query.username || '').trim();
+//   const password = String(req.query.password || '').trim();
+//   const accounts = readAccounts();
+//   const acc = accounts.find((a) => a.username === username && a.password === password);
+//   if (!acc) {
+//     return res.status(404).json({ error: 'Line not found. Check your username and password.' });
+//   }
+//   res.json({ account: publicAccount(acc) });
+// });
 
 // ===================== Admin billing API =====================
 
-app.get('/api/admin/accounts', requireAdmin, (req, res) => {
-  const accounts = readAccounts().map((a) => ({ ...publicAccount(a), email: a.email, created_at: a.created_at }));
-  res.json({ count: accounts.length, accounts });
-});
+// app.get('/api/admin/accounts', requireAdmin, (req, res) => {
+//   const accounts = readAccounts().map((a) => ({ ...publicAccount(a), email: a.email, created_at: a.created_at }));
+//   res.json({ count: accounts.length, accounts });
+// });
 
-app.post('/api/admin/set-status', requireAdmin, (req, res) => {
-  const username = String(req.body?.username || '').trim();
-  const days = Number(req.body?.days);
-  const action = String(req.body?.action || '').trim(); // 'activate' | 'suspend'
-  const accounts = readAccounts();
-  const acc = accounts.find((a) => a.username === username);
-  if (!acc) return res.status(404).json({ error: 'Line not found.' });
+// app.post('/api/admin/set-status', requireAdmin, (req, res) => {
+//   const username = String(req.body?.username || '').trim();
+//   const days = Number(req.body?.days);
+//   const action = String(req.body?.action || '').trim(); // 'activate' | 'suspend'
+//   const accounts = readAccounts();
+//   const acc = accounts.find((a) => a.username === username);
+//   if (!acc) return res.status(404).json({ error: 'Line not found.' });
 
-  if (action === 'suspend') {
-    acc.status = 'suspended';
-  } else if (action === 'activate') {
-    const grant = Number.isFinite(days) && days > 0 ? days : 30;
-    const base = Math.max(nowSec(), acc.exp_date || 0);
-    acc.exp_date = base + grant * 86400;
-    acc.status = 'active';
-  } else {
-    return res.status(400).json({ error: 'action must be "activate" or "suspend".' });
-  }
-  writeAccounts(accounts);
-  res.json({ account: publicAccount(acc) });
-});
+//   if (action === 'suspend') {
+//     acc.status = 'suspended';
+//   } else if (action === 'activate') {
+//     const grant = Number.isFinite(days) && days > 0 ? days : 30;
+//     const base = Math.max(nowSec(), acc.exp_date || 0);
+//     acc.exp_date = base + grant * 86400;
+//     acc.status = 'active';
+//   } else {
+//     return res.status(400).json({ error: 'action must be "activate" or "suspend".' });
+//   }
+//   writeAccounts(accounts);
+//   res.json({ account: publicAccount(acc) });
+// });
 
-app.post('/api/admin/gen-codes', requireAdmin, (req, res) => {
-  const count = Math.min(Math.max(Number(req.body?.count) || 1, 1), 200);
-  const days = Math.max(Number(req.body?.days) || 30, 1);
-  const codes = readCodes();
-  const created = [];
-  for (let i = 0; i < count; i++) {
-    let code;
-    do {
-      code = genCode();
-    } while (codes.some((c) => c.code === code));
-    const entry = { code, days, created_at: nowSec(), used_by: null, used_at: null };
-    codes.push(entry);
-    created.push(entry);
-  }
-  writeCodes(codes);
-  res.json({ created });
-});
+// app.post('/api/admin/gen-codes', requireAdmin, (req, res) => {
+//   const count = Math.min(Math.max(Number(req.body?.count) || 1, 1), 200);
+//   const days = Math.max(Number(req.body?.days) || 30, 1);
+//   const codes = readCodes();
+//   const created = [];
+//   for (let i = 0; i < count; i++) {
+//     let code;
+//     do {
+//       code = genCode();
+//     } while (codes.some((c) => c.code === code));
+//     const entry = { code, days, created_at: nowSec(), used_by: null, used_at: null };
+//     codes.push(entry);
+//     created.push(entry);
+//   }
+//   writeCodes(codes);
+//   res.json({ created });
+// });
 
-app.get('/api/admin/codes', requireAdmin, (req, res) => {
-  res.json({ codes: readCodes() });
-});
+// app.get('/api/admin/codes', requireAdmin, (req, res) => {
+//   res.json({ codes: readCodes() });
+// });
 
 // Admin dashboard (browser view).
 app.get('/admin', requireAdmin, async (req, res) => {
