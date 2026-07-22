@@ -40,6 +40,16 @@ if (!supabaseReady) {
   console.warn('⚠  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — "request to join" storage is disabled.');
 }
 
+// Resend — transactional email (confirmation / approved / onboarding welcome).
+// RESEND_FROM must be a sender on a domain you've verified in Resend, e.g.
+// "Manzar <noreply@mail.yourdomain.com>".
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_FROM = process.env.RESEND_FROM || '';
+const resendReady = Boolean(RESEND_API_KEY && RESEND_FROM);
+if (!resendReady) {
+  console.warn('⚠  RESEND_API_KEY / RESEND_FROM not set — outbound email is disabled.');
+}
+
 // Base headers for Supabase's REST (PostgREST) API.
 function supabaseHeaders(extra = {}) {
   return {
@@ -102,6 +112,87 @@ async function deleteJoinRequest(id) {
   if (!res.ok) {
     throw new Error(`Supabase delete failed (${res.status}): ${await res.text()}`);
   }
+}
+
+// ----- Transactional email (Resend) -----
+
+// Send one email. Returns true if sent, false if email is disabled. Throws on
+// an actual send failure so callers can decide whether to surface it.
+async function sendEmail({ to, subject, html }) {
+  if (!resendReady) {
+    console.warn(`email skipped (Resend not configured): "${subject}" → ${to}`);
+    return false;
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: RESEND_FROM, to, subject, html }),
+  });
+  if (!res.ok) {
+    throw new Error(`Resend send failed (${res.status}): ${await res.text()}`);
+  }
+  return true;
+}
+
+// Shared branded wrapper for all outbound emails (inline styles for email clients).
+function emailShell(heading, bodyHtml) {
+  return `<!DOCTYPE html><html><body style="margin:0;background:#0b0b0b;padding:24px;font-family:system-ui,'Segoe UI',Arial,sans-serif;color:#e5e5e5">
+  <div style="max-width:560px;margin:0 auto;background:#141414;border:1px solid #222;border-radius:12px;overflow:hidden">
+    <div style="background:#E50914;padding:18px 24px"><span style="color:#fff;font-size:18px;font-weight:800;letter-spacing:1px">MANZAR</span></div>
+    <div style="padding:24px">
+      <h1 style="margin:0 0 16px;font-size:20px;color:#fff">${heading}</h1>
+      <div style="font-size:15px;line-height:1.6;color:#cfcfcf">${bodyHtml}</div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #222;font-size:12px;color:#777">You're receiving this because you requested access to Manzar.</div>
+  </div>
+</body></html>`;
+}
+
+// "We got your request" auto-reply, sent right after a submission is stored.
+function confirmationEmail(name, email) {
+  return {
+    to: email,
+    subject: 'We got your Manzar request',
+    html: emailShell('Request received', `<p>Hi ${escapeHtml(name || 'there')},</p>
+      <p>Thanks for requesting access to Manzar. We've received your details and will review your request shortly — you'll hear back from us by email.</p>
+      <p>— The Manzar team</p>`),
+  };
+}
+
+// Sent when an admin marks a request Approved.
+function approvedEmail(r) {
+  return {
+    to: r.email,
+    subject: 'Your Manzar request is approved',
+    html: emailShell('You\'re approved 🎉', `<p>Hi ${escapeHtml(r.name || 'there')},</p>
+      <p>Good news — your request to join Manzar has been approved. We're setting up your Xtream line now and will email your login and setup steps shortly.</p>
+      <p>— The Manzar team</p>`),
+  };
+}
+
+// Sent when an admin marks a request Onboarded, carrying the customer's line.
+function onboardedEmail(r, username, password) {
+  const row = (label, value) =>
+    `<tr><td style="padding:8px 12px;color:#9a9a9a">${label}</td><td style="padding:8px 12px;color:#fff;font-family:ui-monospace,Menlo,monospace">${escapeHtml(value)}</td></tr>`;
+  return {
+    to: r.email,
+    subject: 'Your Manzar line is ready',
+    html: emailShell('Welcome to Manzar', `<p>Hi ${escapeHtml(r.name || 'there')},</p>
+      <p>Your line is live. Plug these details into any Xtream-compatible player:</p>
+      <table style="border-collapse:collapse;background:#0f0f0f;border:1px solid #222;border-radius:8px;margin:8px 0 20px">
+        ${row('Server URL', XTREAM_SERVER_URL)}
+        ${row('Username', username)}
+        ${row('Password', password)}
+      </table>
+      <h2 style="font-size:15px;color:#fff;margin:0 0 8px">How to set up</h2>
+      <ol style="margin:0;padding-left:20px">
+        <li>Install an Xtream player — we recommend <strong>Televizo</strong> (IPTV Smarters, TiViMate and VLC work too).</li>
+        <li>Choose "Login with Xtream Codes".</li>
+        <li>Enter the Server URL, Username and Password above.</li>
+        <li>Your movies and live channels load automatically.</li>
+      </ol>
+      <p style="margin-top:20px">Enjoy,<br>— The Manzar team</p>`),
+  };
 }
 
 app.use(express.json());
@@ -173,6 +264,10 @@ app.post('/api/request', async (req, res) => {
 
   try {
     await insertJoinRequest({ name, email, phone, note });
+    // Best-effort confirmation email — never let it block or fail the request.
+    sendEmail(confirmationEmail(name, email)).catch((err) =>
+      console.error('confirmation email failed:', err.message)
+    );
     res.json({ message: "Thanks! Your request is in — we'll be in touch by email." });
   } catch (err) {
     console.error('join request failed:', err.message);
@@ -186,15 +281,32 @@ app.post('/api/request', async (req, res) => {
 app.post('/api/admin/requests/status', requireAdmin, async (req, res) => {
   const id = String(req.body?.id || '').trim();
   const status = String(req.body?.status || '').trim();
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '').trim();
   if (!id) return res.status(400).json({ error: 'Missing request id.' });
   if (!REQUEST_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${REQUEST_STATUSES.join(', ')}.` });
+  }
+  if (status === 'onboarded' && (!username || !password)) {
+    return res.status(400).json({ error: 'Onboarding needs a username and password to send the welcome email.' });
   }
   if (!supabaseReady) return res.status(503).json({ error: 'Supabase is not configured.' });
   try {
     const request = await updateJoinRequestStatus(id, status);
     if (!request) return res.status(404).json({ error: 'Request not found.' });
-    res.json({ request });
+
+    // Best-effort transactional email — the status change already succeeded, so
+    // report an email failure back to the admin rather than failing the request.
+    let emailed = false;
+    let emailError = '';
+    try {
+      if (status === 'approved') emailed = await sendEmail(approvedEmail(request));
+      else if (status === 'onboarded') emailed = await sendEmail(onboardedEmail(request, username, password));
+    } catch (err) {
+      emailError = err.message;
+      console.error('status email failed:', err.message);
+    }
+    res.json({ request, emailed, emailError });
   } catch (err) {
     console.error('update request failed:', err.message);
     res.status(502).json({ error: 'Could not update the request.' });
@@ -320,7 +432,7 @@ app.get('/admin/requests', requireAdmin, async (req, res) => {
         <td>${escapeHtml(when)}</td>
         <td class="actions">
           ${btn('approve', 'Approve', 'approved')}
-          ${btn('onboard', 'Onboard', 'onboarded')}
+          ${status === 'onboarded' ? '' : `<button class="onboard" onclick="onboard('${id}')">Onboard</button>`}
           ${btn('reject', 'Reject', 'rejected')}
           ${status === 'pending' ? '' : `<button onclick="setStatus('${id}','pending')">Reset</button>`}
           <button class="danger" onclick="del('${id}')">Delete</button>
@@ -339,11 +451,26 @@ app.get('/admin/requests', requireAdmin, async (req, res) => {
   const TOKEN = ${JSON.stringify(String(token))};
   async function post(url, body){
     const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN}, body:JSON.stringify(body)});
-    if(!r.ok){ const d = await r.json().catch(()=>({})); alert(d.error || 'Request failed.'); return false; }
-    return true;
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ alert(d.error || 'Request failed.'); return null; }
+    return d;
   }
   async function setStatus(id, status){
-    if(await post('/api/admin/requests/status', {id, status})) location.reload();
+    const d = await post('/api/admin/requests/status', {id, status});
+    if(!d) return;
+    if(d.emailError) alert('Status updated, but the email could not be sent:\\n' + d.emailError);
+    location.reload();
+  }
+  async function onboard(id){
+    const username = prompt('Xtream username for this customer:');
+    if(username === null) return;
+    const password = prompt('Xtream password for this customer:');
+    if(password === null) return;
+    if(!username.trim() || !password.trim()){ alert('Username and password are both required to onboard.'); return; }
+    const d = await post('/api/admin/requests/status', {id, status:'onboarded', username:username.trim(), password:password.trim()});
+    if(!d) return;
+    if(d.emailError) alert('Onboarded, but the welcome email could not be sent:\\n' + d.emailError);
+    location.reload();
   }
   async function del(id){
     if(!confirm('Delete this request permanently?')) return;
