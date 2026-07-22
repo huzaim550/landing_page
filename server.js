@@ -79,18 +79,27 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-// Insert one join request; returns the stored row.
+// Insert one join request; returns the stored row. Prefers to store the client
+// IP, but if the `ip` column hasn't been added to the table yet it retries
+// without it — so submissions never break just because a migration is pending.
 async function insertJoinRequest({ name, email, phone, note, ip }) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
-    method: 'POST',
-    headers: supabaseHeaders({ Prefer: 'return=representation' }),
-    body: JSON.stringify([{ name, email, phone, note: note || null, ip: ip || null, status: 'pending' }]),
-  });
-  if (!res.ok) {
-    throw new Error(`Supabase insert failed (${res.status}): ${await res.text()}`);
+  const base = { name, email, phone, note: note || null, status: 'pending' };
+  const attempts = ip ? [{ ...base, ip }, base] : [base];
+  for (let i = 0; i < attempts.length; i++) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
+      method: 'POST',
+      headers: supabaseHeaders({ Prefer: 'return=representation' }),
+      body: JSON.stringify([attempts[i]]),
+    });
+    if (res.ok) return (await res.json())[0];
+    const text = await res.text();
+    const ipColumnMissing = /'?ip'?/.test(text) && /(column|schema cache)/i.test(text);
+    if (i < attempts.length - 1 && ipColumnMissing) {
+      console.warn('join_requests.ip column missing — storing request without IP. Run the latest supabase.sql.');
+      continue;
+    }
+    throw new Error(`Supabase insert failed (${res.status}): ${text}`);
   }
-  const rows = await res.json();
-  return rows[0];
 }
 
 // How many existing requests match a column exactly (capped — we only care
@@ -423,17 +432,22 @@ app.post('/api/admin/requests/status', requireAdmin, async (req, res) => {
     if (!request) return res.status(404).json({ error: 'Request not found.' });
 
     // Best-effort transactional email — the status change already succeeded, so
-    // report an email failure back to the admin rather than failing the request.
-    let emailed = false;
-    let emailError = '';
+    // surface WHY an email did or didn't go out rather than failing the request.
+    let emailNote = '';
     try {
-      if (status === 'approved') emailed = await sendEmail(approvedEmail(request));
-      else if (status === 'onboarded') emailed = await sendEmail(onboardedEmail(request, username, password));
+      if (status === 'approved' || status === 'onboarded') {
+        const message = status === 'approved' ? approvedEmail(request) : onboardedEmail(request, username, password);
+        const sent = await sendEmail(message);
+        console.log(`status→${status} for ${request.email}: email ${sent ? 'sent' : 'skipped (Resend not configured)'}`);
+        if (!sent) {
+          emailNote = 'Status saved, but no email was sent — server email is off. Set RESEND_API_KEY and RESEND_FROM in .env and restart.';
+        }
+      }
     } catch (err) {
-      emailError = err.message;
+      emailNote = 'Status saved, but the email failed to send: ' + err.message;
       console.error('status email failed:', err.message);
     }
-    res.json({ request, emailed, emailError });
+    res.json({ request, emailNote });
   } catch (err) {
     console.error('update request failed:', err.message);
     res.status(502).json({ error: 'Could not update the request.' });
@@ -582,7 +596,7 @@ app.get('/admin/requests', requireAdminPage, async (req, res) => {
   async function setStatus(id, status){
     const d = await post('/api/admin/requests/status', {id, status});
     if(!d) return;
-    if(d.emailError) alert('Status updated, but the email could not be sent:\\n' + d.emailError);
+    if(d.emailNote) alert(d.emailNote);
     location.reload();
   }
   async function onboard(id){
@@ -593,7 +607,7 @@ app.get('/admin/requests', requireAdminPage, async (req, res) => {
     if(!username.trim() || !password.trim()){ alert('Username and password are both required to onboard.'); return; }
     const d = await post('/api/admin/requests/status', {id, status:'onboarded', username:username.trim(), password:password.trim()});
     if(!d) return;
-    if(d.emailError) alert('Onboarded, but the welcome email could not be sent:\\n' + d.emailError);
+    if(d.emailNote) alert(d.emailNote);
     location.reload();
   }
   async function del(id){
