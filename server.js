@@ -1,18 +1,16 @@
-// ===== Manzar — Xtream IPTV landing + billing backend =====
+// ===== Manzar — Xtream IPTV landing + onboarding backend =====
 // This server runs the *storefront* for a public-domain / free-to-air IPTV
-// service. It sells access as Xtream "lines" (server URL + username + password)
-// that customers plug into any Xtream-compatible player.
+// service. Visitors "request to join"; those requests are stored in Supabase
+// and worked through the admin panel.
 //
 // It does NOT serve video. The actual Xtream Codes API + streams live on your
 // real streaming server (set XTREAM_SERVER_URL to point customers at it).
 //
-// Paywall model: manual / activation codes.
-//   1. Visitor subscribes  -> a *pending* line is created (username+password).
-//   2. They pay you off-platform, then redeem an activation code (or you
-//      activate them from /admin). Redeeming sets the line Active + expiry.
+// Onboarding model: request-driven.
+//   1. Visitor submits name + email + phone -> a "pending" request is stored.
+//   2. From /admin/requests you approve, reject, or mark them onboarded.
 
 import express from 'express';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -57,7 +55,7 @@ async function insertJoinRequest({ name, email, phone, note }) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
     method: 'POST',
     headers: supabaseHeaders({ Prefer: 'return=representation' }),
-    body: JSON.stringify([{ name, email, phone, note: note || null, status: 'new' }]),
+    body: JSON.stringify([{ name, email, phone, note: note || null, status: 'pending' }]),
   });
   if (!res.ok) {
     throw new Error(`Supabase insert failed (${res.status}): ${await res.text()}`);
@@ -78,9 +76,37 @@ async function listJoinRequests(limit = 200) {
   return res.json();
 }
 
+// Update one join request's status; returns the updated row.
+async function updateJoinRequestStatus(id, status) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: supabaseHeaders({ Prefer: 'return=representation' }),
+      body: JSON.stringify({ status }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Supabase update failed (${res.status}): ${await res.text()}`);
+  }
+  const rows = await res.json();
+  return rows[0];
+}
+
+// Permanently delete one join request.
+async function deleteJoinRequest(id) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${encodeURIComponent(id)}`,
+    { method: 'DELETE', headers: supabaseHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`Supabase delete failed (${res.status}): ${await res.text()}`);
+  }
+}
+
 app.use(express.json());
 
-// Admin password for the billing dashboard. Set ADMIN_TOKEN in production.
+// Admin password for the dashboard. Set ADMIN_TOKEN in production.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'changeme';
 if (ADMIN_TOKEN === 'changeme') {
   console.warn('⚠  ADMIN_TOKEN is unset — using default "changeme". Set ADMIN_TOKEN before deploying.');
@@ -96,18 +122,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Subscription plans (price is informational — payment is handled manually).
-const PLANS = [
-  { id: '1m', label: '1 Month', months: 1, price: 5, connections: 1 },
-  { id: '3m', label: '3 Months', months: 3, price: 12, connections: 1, badge: 'Popular' },
-  { id: '12m', label: '12 Months', months: 12, price: 35, connections: 2, badge: 'Best value' },
-];
-const planById = (id) => PLANS.find((p) => p.id === id);
-
-// ----- Tiny JSON "database" helpers -----
-const ACCOUNTS_PATH = path.join(__dirname, 'accounts.json');
-const CODES_PATH = path.join(__dirname, 'codes.json');
-
+// ----- Tiny JSON file reader (used for the content catalog) -----
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -115,52 +130,19 @@ function readJson(file, fallback) {
     return fallback;
   }
 }
-function writeJson(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
-const readAccounts = () => readJson(ACCOUNTS_PATH, []);
-const writeAccounts = (a) => writeJson(ACCOUNTS_PATH, a);
-const readCodes = () => readJson(CODES_PATH, []);
-const writeCodes = (c) => writeJson(CODES_PATH, c);
+
+// Lifecycle of a join request: it lands as "pending", then an admin moves it
+// to approved / rejected / onboarded from the requests page.
+const REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'onboarded'];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+?[0-9()\-\s]{7,20}$/;
-const nowSec = () => Math.floor(Date.now() / 1000);
-
-// Human-readable but hard-to-guess credentials.
-function randId(len = 8) {
-  return crypto.randomBytes(16).toString('base64url').replace(/[^a-z0-9]/gi, '').slice(0, len);
-}
-function genCode() {
-  const part = () => crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 4);
-  return `MANZAR-${part()}-${part()}`;
-}
-
-// Derive the live status of an account (pending / active / expired / suspended).
-function accountStatus(acc) {
-  if (acc.status === 'suspended') return 'suspended';
-  if (acc.status === 'pending') return 'pending';
-  if (acc.exp_date && acc.exp_date < nowSec()) return 'expired';
-  return 'active';
-}
-
-function publicAccount(acc) {
-  return {
-    username: acc.username,
-    password: acc.password,
-    plan: acc.plan,
-    status: accountStatus(acc),
-    exp_date: acc.exp_date || 0,
-    max_connections: acc.max_connections || 1,
-    server_url: XTREAM_SERVER_URL,
-  };
-}
 
 // ===================== Public storefront API =====================
 
-// Config the frontend needs (server URL to display, plans).
+// Config the frontend needs (server URL to display in the setup section).
 app.get('/api/config', (req, res) => {
-  res.json({ server_url: XTREAM_SERVER_URL, plans: PLANS });
+  res.json({ server_url: XTREAM_SERVER_URL });
 });
 
 // Content preview catalog (public-domain movies + free-to-air live channels).
@@ -198,275 +180,177 @@ app.post('/api/request', async (req, res) => {
   }
 });
 
-// Subscribe -> create a PENDING line. Returns the customer's Xtream credentials.
-// app.post('/api/subscribe', (req, res) => {
-//   const email = String(req.body?.email || '').trim().toLowerCase();
-//   const planId = String(req.body?.plan || '').trim();
-//   const plan = planById(planId);
+// ===================== Admin: join-request management =====================
 
-//   if (!EMAIL_RE.test(email)) {
-//     return res.status(400).json({ error: 'Please enter a valid email address.' });
-//   }
-//   if (!plan) {
-//     return res.status(400).json({ error: 'Please choose a valid plan.' });
-//   }
+// Move a request through its lifecycle (pending → approved / rejected / onboarded).
+app.post('/api/admin/requests/status', requireAdmin, async (req, res) => {
+  const id = String(req.body?.id || '').trim();
+  const status = String(req.body?.status || '').trim();
+  if (!id) return res.status(400).json({ error: 'Missing request id.' });
+  if (!REQUEST_STATUSES.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${REQUEST_STATUSES.join(', ')}.` });
+  }
+  if (!supabaseReady) return res.status(503).json({ error: 'Supabase is not configured.' });
+  try {
+    const request = await updateJoinRequestStatus(id, status);
+    if (!request) return res.status(404).json({ error: 'Request not found.' });
+    res.json({ request });
+  } catch (err) {
+    console.error('update request failed:', err.message);
+    res.status(502).json({ error: 'Could not update the request.' });
+  }
+});
 
-//   const accounts = readAccounts();
+// Delete a request permanently.
+app.post('/api/admin/requests/delete', requireAdmin, async (req, res) => {
+  const id = String(req.body?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'Missing request id.' });
+  if (!supabaseReady) return res.status(503).json({ error: 'Supabase is not configured.' });
+  try {
+    await deleteJoinRequest(id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('delete request failed:', err.message);
+    res.status(502).json({ error: 'Could not delete the request.' });
+  }
+});
 
-//   // Auto-generate a unique username + password (Xtream "line").
-//   let username;
-//   do {
-//     username = `mz_${randId(6)}`;
-//   } while (accounts.some((a) => a.username === username));
-//   const password = randId(10);
+// ===================== Admin UI (browser views) =====================
 
-//   const acc = {
-//     username,
-//     password,
-//     email,
-//     plan: plan.id,
-//     status: 'pending',
-//     exp_date: 0,
-//     max_connections: plan.connections || 1,
-//     created_at: nowSec(),
-//   };
-//   accounts.push(acc);
-//   writeAccounts(accounts);
+// Shared page chrome: dark theme, top nav, admin token carried in every link.
+function adminPage({ title, token, body }) {
+  const t = encodeURIComponent(String(token));
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manzar — ${escapeHtml(title)}</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0b0b0b;color:#eee;margin:0}
+  .topbar{display:flex;align-items:center;gap:24px;padding:16px 32px;border-bottom:1px solid #222;background:#101010}
+  .topbar h1{color:#E50914;margin:0;font-size:1.1rem}
+  .topbar nav{display:flex;gap:6px}
+  .topbar nav a{color:#cfcfcf;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:.9rem}
+  .topbar nav a:hover{background:#1c1c1c}
+  .topbar nav a.active{background:#E50914;color:#fff}
+  main{padding:28px 32px;max-width:1100px}
+  h2{margin:0 0 16px;font-size:1.05rem;color:#ddd}
+  .muted{color:#8a8a8a;font-size:.85rem}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:28px}
+  .card{background:#141414;border:1px solid #222;border-radius:10px;padding:18px}
+  .card .num{display:block;font-size:1.8rem;font-weight:800}
+  .card .lbl{color:#9a9a9a;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px}
+  table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #222;font-size:13px;vertical-align:top}
+  th{color:#b3b3b3} tr:hover td{background:#141414}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;text-transform:uppercase;font-weight:700}
+  .pill.pending{background:#3d360f;color:#facc15}
+  .pill.approved{background:#0f2a3d;color:#38bdf8}
+  .pill.rejected{background:#3d0f12;color:#f87171}
+  .pill.onboarded{background:#0f3d21;color:#4ade80}
+  .actions{white-space:nowrap}
+  button{background:#1c1c1c;color:#eee;border:1px solid #333;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:12px;margin:2px 2px 0 0}
+  button:hover{border-color:#E50914}
+  button.approve:hover{border-color:#38bdf8;color:#38bdf8}
+  button.onboard:hover{border-color:#4ade80;color:#4ade80}
+  button.reject:hover,button.danger:hover{border-color:#f87171;color:#f87171}
+  .btn-link{display:inline-block;background:#E50914;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:.9rem}
+</style></head><body>
+  <header class="topbar">
+    <h1>Manzar Admin</h1>
+    <nav>
+      <a href="/admin?token=${t}"${title === 'Dashboard' ? ' class="active"' : ''}>Dashboard</a>
+      <a href="/admin/requests?token=${t}"${title === 'Requests' ? ' class="active"' : ''}>Requests</a>
+    </nav>
+  </header>
+  <main>${body}</main>
+</body></html>`;
+}
 
-//   res.json({
-//     message: 'Line created. Redeem your activation code (or pay to receive one) to go live.',
-//     account: publicAccount(acc),
-//     plan,
-//   });
-// });
+// Load requests from Supabase, returning { requests, error }.
+async function loadRequests() {
+  if (!supabaseReady) {
+    return { requests: [], error: 'Supabase is not configured (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).' };
+  }
+  try {
+    return { requests: await listJoinRequests(), error: '' };
+  } catch (err) {
+    console.error('admin requests load failed:', err.message);
+    return { requests: [], error: 'Could not load requests from Supabase.' };
+  }
+}
 
-// // Redeem an activation code -> mark the line Active and extend expiry.
-// app.post('/api/redeem', (req, res) => {
-//   const username = String(req.body?.username || '').trim();
-//   const code = String(req.body?.code || '').trim().toUpperCase();
+const countBy = (rows, status) => rows.filter((r) => (r.status || 'pending') === status).length;
 
-//   const accounts = readAccounts();
-//   const acc = accounts.find((a) => a.username === username);
-//   if (!acc) {
-//     return res.status(404).json({ error: 'No line found for that username.' });
-//   }
-
-//   const codes = readCodes();
-//   const entry = codes.find((c) => c.code === code);
-//   if (!entry) {
-//     return res.status(400).json({ error: 'Invalid activation code.' });
-//   }
-//   if (entry.used_by) {
-//     return res.status(400).json({ error: 'This activation code has already been used.' });
-//   }
-
-//   // Extend from the later of "now" or the current expiry (stacking).
-//   const base = Math.max(nowSec(), acc.exp_date || 0);
-//   acc.exp_date = base + entry.days * 86400;
-//   acc.status = 'active';
-//   entry.used_by = username;
-//   entry.used_at = nowSec();
-
-//   writeAccounts(accounts);
-//   writeCodes(codes);
-
-//   res.json({
-//     message: `Activated! Your line is live for ${entry.days} more day(s).`,
-//     account: publicAccount(acc),
-//   });
-// });
-
-// // Check the status of an existing line.
-// app.get('/api/account', (req, res) => {
-//   const username = String(req.query.username || '').trim();
-//   const password = String(req.query.password || '').trim();
-//   const accounts = readAccounts();
-//   const acc = accounts.find((a) => a.username === username && a.password === password);
-//   if (!acc) {
-//     return res.status(404).json({ error: 'Line not found. Check your username and password.' });
-//   }
-//   res.json({ account: publicAccount(acc) });
-// });
-
-// ===================== Admin billing API =====================
-
-// app.get('/api/admin/accounts', requireAdmin, (req, res) => {
-//   const accounts = readAccounts().map((a) => ({ ...publicAccount(a), email: a.email, created_at: a.created_at }));
-//   res.json({ count: accounts.length, accounts });
-// });
-
-// app.post('/api/admin/set-status', requireAdmin, (req, res) => {
-//   const username = String(req.body?.username || '').trim();
-//   const days = Number(req.body?.days);
-//   const action = String(req.body?.action || '').trim(); // 'activate' | 'suspend'
-//   const accounts = readAccounts();
-//   const acc = accounts.find((a) => a.username === username);
-//   if (!acc) return res.status(404).json({ error: 'Line not found.' });
-
-//   if (action === 'suspend') {
-//     acc.status = 'suspended';
-//   } else if (action === 'activate') {
-//     const grant = Number.isFinite(days) && days > 0 ? days : 30;
-//     const base = Math.max(nowSec(), acc.exp_date || 0);
-//     acc.exp_date = base + grant * 86400;
-//     acc.status = 'active';
-//   } else {
-//     return res.status(400).json({ error: 'action must be "activate" or "suspend".' });
-//   }
-//   writeAccounts(accounts);
-//   res.json({ account: publicAccount(acc) });
-// });
-
-// app.post('/api/admin/gen-codes', requireAdmin, (req, res) => {
-//   const count = Math.min(Math.max(Number(req.body?.count) || 1, 1), 200);
-//   const days = Math.max(Number(req.body?.days) || 30, 1);
-//   const codes = readCodes();
-//   const created = [];
-//   for (let i = 0; i < count; i++) {
-//     let code;
-//     do {
-//       code = genCode();
-//     } while (codes.some((c) => c.code === code));
-//     const entry = { code, days, created_at: nowSec(), used_by: null, used_at: null };
-//     codes.push(entry);
-//     created.push(entry);
-//   }
-//   writeCodes(codes);
-//   res.json({ created });
-// });
-
-// app.get('/api/admin/codes', requireAdmin, (req, res) => {
-//   res.json({ codes: readCodes() });
-// });
-
-// Admin dashboard (browser view).
+// Admin dashboard: at-a-glance counts + a link into request management.
 app.get('/admin', requireAdmin, async (req, res) => {
   const token = req.query.token || '';
-  const accounts = readAccounts();
-  const codes = readCodes();
-  const unused = codes.filter((c) => !c.used_by).length;
-  const active = accounts.filter((a) => accountStatus(a) === 'active').length;
+  const t = encodeURIComponent(String(token));
+  const { requests, error } = await loadRequests();
+  const body = `
+    <h2>Overview</h2>
+    ${error ? `<p class="muted">${escapeHtml(error)}</p>` : ''}
+    <div class="cards">
+      <div class="card"><span class="num">${requests.length}</span><span class="lbl">Total</span></div>
+      <div class="card"><span class="num">${countBy(requests, 'pending')}</span><span class="lbl">Pending</span></div>
+      <div class="card"><span class="num">${countBy(requests, 'approved')}</span><span class="lbl">Approved</span></div>
+      <div class="card"><span class="num">${countBy(requests, 'onboarded')}</span><span class="lbl">Onboarded</span></div>
+      <div class="card"><span class="num">${countBy(requests, 'rejected')}</span><span class="lbl">Rejected</span></div>
+    </div>
+    <a class="btn-link" href="/admin/requests?token=${t}">Manage requests →</a>
+    <p class="muted" style="margin-top:24px">Xtream server advertised to customers: ${escapeHtml(XTREAM_SERVER_URL)}</p>`;
+  res.type('html').send(adminPage({ title: 'Dashboard', token, body }));
+});
 
-  // Load "request to join" submissions from Supabase.
-  let joinRequests = [];
-  let joinError = supabaseReady ? '' : 'Supabase is not configured (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).';
-  if (supabaseReady) {
-    try {
-      joinRequests = await listJoinRequests();
-    } catch (err) {
-      joinError = 'Could not load requests from Supabase.';
-      console.error('admin join requests load failed:', err.message);
-    }
-  }
-  const joinRows = joinRequests
+// Requests page: the full CRUD table for join requests.
+app.get('/admin/requests', requireAdmin, async (req, res) => {
+  const token = req.query.token || '';
+  const { requests, error } = await loadRequests();
+
+  const rows = requests
     .map((r) => {
+      const status = r.status || 'pending';
       const when = r.created_at ? new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ') : '—';
+      const id = escapeHtml(r.id);
+      const btn = (cls, label, next) =>
+        status === next ? '' : `<button class="${cls}" onclick="setStatus('${id}','${next}')">${label}</button>`;
       return `<tr>
         <td>${escapeHtml(r.name || '')}</td>
         <td>${escapeHtml(r.email || '')}</td>
         <td>${escapeHtml(r.phone || '')}</td>
         <td>${escapeHtml(r.note || '')}</td>
-        <td><span class="pill ${escapeHtml(r.status || 'new')}">${escapeHtml(r.status || 'new')}</span></td>
-        <td>${escapeHtml(when)}</td></tr>`;
-    })
-    .join('');
-
-  const accRows = accounts
-    .map((a) => {
-      const st = accountStatus(a);
-      const exp = a.exp_date ? new Date(a.exp_date * 1000).toISOString().slice(0, 10) : '—';
-      return `<tr>
-        <td>${escapeHtml(a.username)}</td>
-        <td>${escapeHtml(a.email || '')}</td>
-        <td>${escapeHtml(a.plan)}</td>
-        <td><span class="pill ${st}">${st}</span></td>
-        <td>${exp}</td>
+        <td><span class="pill ${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+        <td>${escapeHtml(when)}</td>
         <td class="actions">
-          <button onclick="act('${escapeHtml(a.username)}','activate',30)">+30d</button>
-          <button onclick="act('${escapeHtml(a.username)}','activate',90)">+90d</button>
-          <button class="danger" onclick="act('${escapeHtml(a.username)}','suspend')">Suspend</button>
+          ${btn('approve', 'Approve', 'approved')}
+          ${btn('onboard', 'Onboard', 'onboarded')}
+          ${btn('reject', 'Reject', 'rejected')}
+          ${status === 'pending' ? '' : `<button onclick="setStatus('${id}','pending')">Reset</button>`}
+          <button class="danger" onclick="del('${id}')">Delete</button>
         </td></tr>`;
     })
     .join('');
 
-  const codeRows = codes
-    .slice(-40)
-    .reverse()
-    .map(
-      (c) =>
-        `<tr><td class="mono">${escapeHtml(c.code)}</td><td>${c.days}d</td><td>${
-          c.used_by ? `used by ${escapeHtml(c.used_by)}` : '<span class="ok">unused</span>'
-        }</td></tr>`
-    )
-    .join('');
-
-  res.type('html').send(`<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manzar — Billing</title>
-<style>
-  body{font-family:system-ui,sans-serif;background:#0b0b0b;color:#eee;margin:0;padding:32px}
-  h1{color:#E50914;margin:0 0 4px} h2{margin:32px 0 12px;font-size:1.1rem;color:#ddd}
-  .stats{color:#b3b3b3;margin-bottom:16px}
-  table{border-collapse:collapse;width:100%;margin-bottom:8px}
-  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #222;font-size:13px}
-  th{color:#b3b3b3} tr:hover td{background:#141414}
-  .mono{font-family:ui-monospace,monospace}
-  .pill{padding:2px 8px;border-radius:999px;font-size:11px;text-transform:uppercase}
-  .pill.active{background:#0f3d21;color:#4ade80}.pill.pending,.pill.new{background:#3d360f;color:#facc15}
-  .pill.expired,.pill.suspended{background:#3d0f12;color:#f87171}
-  .ok{color:#4ade80}
-  button{background:#1c1c1c;color:#eee;border:1px solid #333;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:12px;margin-right:4px}
-  button:hover{border-color:#E50914} button.danger:hover{border-color:#f87171;color:#f87171}
-  .gen{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-  .gen input{background:#141414;border:1px solid #333;color:#eee;border-radius:5px;padding:7px 10px;width:80px}
-  .gen button{background:#E50914;border-color:#E50914;color:#fff;padding:8px 14px}
-  pre{background:#141414;border:1px solid #222;border-radius:6px;padding:12px;white-space:pre-wrap;word-break:break-all}
-</style></head><body>
-  <h1>Manzar — Billing</h1>
-  <p class="stats">${joinRequests.length} join request(s) · ${accounts.length} line(s) · ${active} active · ${unused} unused code(s) · Xtream: <span class="mono">${escapeHtml(
-    XTREAM_SERVER_URL
-  )}</span></p>
-
-  <h2>Join requests</h2>
-  ${joinError ? `<p class="stats">${escapeHtml(joinError)}</p>` : ''}
-  <table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Note</th><th>Status</th><th>Received</th></tr></thead>
-  <tbody>${joinRows || '<tr><td colspan="6">No requests yet.</td></tr>'}</tbody></table>
-
-  <h2>Generate activation codes</h2>
-  <div class="gen">
-    <label>Count <input id="gcount" type="number" value="5" min="1" max="200"></label>
-    <label>Days <input id="gdays" type="number" value="30" min="1"></label>
-    <button onclick="gen()">Generate</button>
-  </div>
-  <pre id="genout" hidden></pre>
-
-  <h2>Lines</h2>
-  <table><thead><tr><th>Username</th><th>Email</th><th>Plan</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
-  <tbody>${accRows || '<tr><td colspan="6">No lines yet.</td></tr>'}</tbody></table>
-
-  <h2>Recent codes</h2>
-  <table><thead><tr><th>Code</th><th>Days</th><th>State</th></tr></thead>
-  <tbody>${codeRows || '<tr><td colspan="3">No codes yet.</td></tr>'}</tbody></table>
-
+  const body = `
+    <h2>Join requests <span class="muted">(${requests.length})</span></h2>
+    ${error ? `<p class="muted">${escapeHtml(error)}</p>` : ''}
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Note</th><th>Status</th><th>Received</th><th>Actions</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="muted">No requests yet.</td></tr>'}</tbody>
+    </table>
 <script>
   const TOKEN = ${JSON.stringify(String(token))};
   async function post(url, body){
     const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN}, body:JSON.stringify(body)});
-    return r.json();
+    if(!r.ok){ const d = await r.json().catch(()=>({})); alert(d.error || 'Request failed.'); return false; }
+    return true;
   }
-  async function act(username, action, days){
-    await post('/api/admin/set-status', {username, action, days});
-    location.reload();
+  async function setStatus(id, status){
+    if(await post('/api/admin/requests/status', {id, status})) location.reload();
   }
-  async function gen(){
-    const count = +document.getElementById('gcount').value;
-    const days = +document.getElementById('gdays').value;
-    const {created} = await post('/api/admin/gen-codes', {count, days});
-    const out = document.getElementById('genout');
-    out.hidden = false;
-    out.textContent = created.map(c=>c.code).join('\\n');
+  async function del(id){
+    if(!confirm('Delete this request permanently?')) return;
+    if(await post('/api/admin/requests/delete', {id})) location.reload();
   }
-</script>
-</body></html>`);
+</script>`;
+  res.type('html').send(adminPage({ title: 'Requests', token, body }));
 });
 
 function escapeHtml(str) {
