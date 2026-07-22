@@ -11,6 +11,7 @@
 //   2. From /admin/requests you approve, reject, or mark them onboarded.
 
 import express from 'express';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,6 +27,24 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// If you deploy behind a reverse proxy / load balancer (nginx, Render, Fly,
+// Cloudflare, etc.), set TRUST_PROXY so req.ip reflects the real client IP.
+// Use the number of proxy hops in front of this app (usually 1), or "true".
+// Leave unset for a directly-exposed server — trusting X-Forwarded-For when no
+// proxy sets it would let clients spoof their IP and bypass rate limits.
+const TRUST_PROXY = process.env.TRUST_PROXY;
+if (TRUST_PROXY !== undefined) {
+  app.set('trust proxy', /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY) : TRUST_PROXY === 'true' ? true : TRUST_PROXY);
+}
+
+// Baseline security headers on every response.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 
 // The Xtream server customers actually connect their player to.
 const XTREAM_SERVER_URL = process.env.XTREAM_SERVER_URL || 'http://your-xtream-server:8080';
@@ -61,17 +80,31 @@ function supabaseHeaders(extra = {}) {
 }
 
 // Insert one join request; returns the stored row.
-async function insertJoinRequest({ name, email, phone, note }) {
+async function insertJoinRequest({ name, email, phone, note, ip }) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
     method: 'POST',
     headers: supabaseHeaders({ Prefer: 'return=representation' }),
-    body: JSON.stringify([{ name, email, phone, note: note || null, status: 'pending' }]),
+    body: JSON.stringify([{ name, email, phone, note: note || null, ip: ip || null, status: 'pending' }]),
   });
   if (!res.ok) {
     throw new Error(`Supabase insert failed (${res.status}): ${await res.text()}`);
   }
   const rows = await res.json();
   return rows[0];
+}
+
+// How many existing requests match a column exactly (capped — we only care
+// whether the per-identity limit has been reached). Used to rate-limit joins.
+async function countRequestsBy(column, value, cap) {
+  if (!value) return 0;
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?${column}=eq.${encodeURIComponent(value)}&select=id&limit=${cap}`,
+    { headers: supabaseHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`Supabase count failed (${res.status}): ${await res.text()}`);
+  }
+  return (await res.json()).length;
 }
 
 // List join requests, newest first (for the admin panel).
@@ -200,15 +233,65 @@ app.use(express.json());
 // Admin password for the dashboard. Set ADMIN_TOKEN in production.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'changeme';
 if (ADMIN_TOKEN === 'changeme') {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: ADMIN_TOKEN must be set to a strong secret in production. Refusing to start.');
+    process.exit(1);
+  }
   console.warn('⚠  ADMIN_TOKEN is unset — using default "changeme". Set ADMIN_TOKEN before deploying.');
 }
+const ADMIN_COOKIE = 'mz_admin';
 
+// Constant-time token comparison (avoids leaking the token via timing).
+function tokenMatches(candidate) {
+  const a = Buffer.from(String(candidate));
+  const b = Buffer.from(ADMIN_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function getCookie(req, name) {
+  const raw = req.headers.cookie || '';
+  for (const part of raw.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return '';
+}
+
+// API guard for the admin POST endpoints. Requires the token in the
+// Authorization header (or ?token=) — deliberately NOT the cookie, so these
+// state-changing endpoints stay immune to CSRF (a browser won't auto-attach
+// the header to a cross-site request).
 function requireAdmin(req, res, next) {
   const header = req.get('authorization') || '';
   const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
-  const token = req.query.token || bearer;
-  if (token !== ADMIN_TOKEN) {
+  const token = bearer || (typeof req.query.token === 'string' ? req.query.token : '');
+  if (!tokenMatches(token)) {
     return res.status(401).json({ error: 'Unauthorized. Provide the admin token.' });
+  }
+  next();
+}
+
+// Page guard for the admin browser views. Accepts the token from a first-time
+// ?token= link, then moves it into an HttpOnly cookie and redirects to a clean
+// URL so the secret stops living in browser history, logs, and Referer headers.
+function requireAdminPage(req, res, next) {
+  const cookieTok = getCookie(req, ADMIN_COOKIE);
+  const queryTok = typeof req.query.token === 'string' ? req.query.token : '';
+  const token = cookieTok || queryTok;
+  if (!tokenMatches(token)) {
+    return res
+      .status(401)
+      .type('html')
+      .send('<p style="font-family:system-ui;background:#0b0b0b;color:#eee;padding:32px">Unauthorized. Open this page as <code>?token=YOUR_ADMIN_TOKEN</code>.</p>');
+  }
+  if (queryTok && !cookieTok) {
+    const secure = req.secure ? '; Secure' : '';
+    res.setHeader(
+      'Set-Cookie',
+      `${ADMIN_COOKIE}=${encodeURIComponent(ADMIN_TOKEN)}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400${secure}`
+    );
+    return res.redirect(req.path);
   }
   next();
 }
@@ -228,6 +311,33 @@ const REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'onboarded'];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+?[0-9()\-\s]{7,20}$/;
+
+// Hard cap: at most this many requests may ever share the same email, phone,
+// or IP address.
+const MAX_REQUESTS_PER_IDENTITY = 2;
+
+// Cheap in-memory burst limiter: cap how many submissions one IP can make in a
+// short window, so the endpoint (and its Supabase/email calls) can't be flooded
+// even before the per-identity cap kicks in. Resets on restart — fine as a
+// first line of defence in front of the durable per-identity limit above.
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+const BURST_MAX = 6;
+const burstHits = new Map(); // ip -> number[] (recent request timestamps)
+
+function isBurstLimited(ip) {
+  if (!ip) return false;
+  const now = Date.now();
+  const recent = (burstHits.get(ip) || []).filter((t) => now - t < BURST_WINDOW_MS);
+  recent.push(now);
+  burstHits.set(ip, recent);
+  if (burstHits.size > 5000) {
+    // Bound memory: drop entries whose newest hit has aged out of the window.
+    for (const [key, hits] of burstHits) {
+      if (now - hits[hits.length - 1] >= BURST_WINDOW_MS) burstHits.delete(key);
+    }
+  }
+  return recent.length > BURST_MAX;
+}
 
 // ===================== Public storefront API =====================
 
@@ -262,8 +372,25 @@ app.post('/api/request', async (req, res) => {
     return res.status(503).json({ error: 'Requests are temporarily unavailable. Please try again later.' });
   }
 
+  const ip = req.ip || '';
+  if (isBurstLimited(ip)) {
+    return res.status(429).json({ error: 'Too many requests from your connection. Please try again later.' });
+  }
+
   try {
-    await insertJoinRequest({ name, email, phone, note });
+    // Per-identity cap: block if this email, phone, or IP already hit the limit.
+    const [byEmail, byPhone, byIp] = await Promise.all([
+      countRequestsBy('email', email, MAX_REQUESTS_PER_IDENTITY),
+      countRequestsBy('phone', phone, MAX_REQUESTS_PER_IDENTITY),
+      countRequestsBy('ip', ip, MAX_REQUESTS_PER_IDENTITY),
+    ]);
+    if (byEmail >= MAX_REQUESTS_PER_IDENTITY || byPhone >= MAX_REQUESTS_PER_IDENTITY || byIp >= MAX_REQUESTS_PER_IDENTITY) {
+      return res.status(429).json({
+        error: "You've already submitted the maximum number of requests. We'll be in touch soon.",
+      });
+    }
+
+    await insertJoinRequest({ name, email, phone, note, ip });
     // Best-effort confirmation email — never let it block or fail the request.
     sendEmail(confirmationEmail(name, email)).catch((err) =>
       console.error('confirmation email failed:', err.message)
@@ -329,9 +456,9 @@ app.post('/api/admin/requests/delete', requireAdmin, async (req, res) => {
 
 // ===================== Admin UI (browser views) =====================
 
-// Shared page chrome: dark theme, top nav, admin token carried in every link.
-function adminPage({ title, token, body }) {
-  const t = encodeURIComponent(String(token));
+// Shared page chrome: dark theme, top nav. Auth rides in the HttpOnly cookie,
+// so navigation links carry no token.
+function adminPage({ title, body }) {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manzar — ${escapeHtml(title)}</title>
 <style>
@@ -368,8 +495,8 @@ function adminPage({ title, token, body }) {
   <header class="topbar">
     <h1>Manzar Admin</h1>
     <nav>
-      <a href="/admin?token=${t}"${title === 'Dashboard' ? ' class="active"' : ''}>Dashboard</a>
-      <a href="/admin/requests?token=${t}"${title === 'Requests' ? ' class="active"' : ''}>Requests</a>
+      <a href="/admin"${title === 'Dashboard' ? ' class="active"' : ''}>Dashboard</a>
+      <a href="/admin/requests"${title === 'Requests' ? ' class="active"' : ''}>Requests</a>
     </nav>
   </header>
   <main>${body}</main>
@@ -392,9 +519,7 @@ async function loadRequests() {
 const countBy = (rows, status) => rows.filter((r) => (r.status || 'pending') === status).length;
 
 // Admin dashboard: at-a-glance counts + a link into request management.
-app.get('/admin', requireAdmin, async (req, res) => {
-  const token = req.query.token || '';
-  const t = encodeURIComponent(String(token));
+app.get('/admin', requireAdminPage, async (req, res) => {
   const { requests, error } = await loadRequests();
   const body = `
     <h2>Overview</h2>
@@ -406,14 +531,13 @@ app.get('/admin', requireAdmin, async (req, res) => {
       <div class="card"><span class="num">${countBy(requests, 'onboarded')}</span><span class="lbl">Onboarded</span></div>
       <div class="card"><span class="num">${countBy(requests, 'rejected')}</span><span class="lbl">Rejected</span></div>
     </div>
-    <a class="btn-link" href="/admin/requests?token=${t}">Manage requests →</a>
+    <a class="btn-link" href="/admin/requests">Manage requests →</a>
     <p class="muted" style="margin-top:24px">Xtream server advertised to customers: ${escapeHtml(XTREAM_SERVER_URL)}</p>`;
-  res.type('html').send(adminPage({ title: 'Dashboard', token, body }));
+  res.type('html').send(adminPage({ title: 'Dashboard', body }));
 });
 
 // Requests page: the full CRUD table for join requests.
-app.get('/admin/requests', requireAdmin, async (req, res) => {
-  const token = req.query.token || '';
+app.get('/admin/requests', requireAdminPage, async (req, res) => {
   const { requests, error } = await loadRequests();
 
   const rows = requests
@@ -448,7 +572,7 @@ app.get('/admin/requests', requireAdmin, async (req, res) => {
       <tbody>${rows || '<tr><td colspan="7" class="muted">No requests yet.</td></tr>'}</tbody>
     </table>
 <script>
-  const TOKEN = ${JSON.stringify(String(token))};
+  const TOKEN = ${JSON.stringify(String(ADMIN_TOKEN))};
   async function post(url, body){
     const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN}, body:JSON.stringify(body)});
     const d = await r.json().catch(()=>({}));
@@ -477,7 +601,7 @@ app.get('/admin/requests', requireAdmin, async (req, res) => {
     if(await post('/api/admin/requests/delete', {id})) location.reload();
   }
 </script>`;
-  res.type('html').send(adminPage({ title: 'Requests', token, body }));
+  res.type('html').send(adminPage({ title: 'Requests', body }));
 });
 
 function escapeHtml(str) {
@@ -489,8 +613,9 @@ function escapeHtml(str) {
 // Health check.
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-// Serve the static storefront (index.html, css/, js/, assets/).
-app.use(express.static(__dirname));
+// Serve the static storefront from ./public only. Everything else in the repo
+// (server.js, package.json, .git, .env, supabase.sql, …) stays unreachable.
+app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny' }));
 
 app.listen(PORT, () => {
   console.log(`Manzar storefront running at http://localhost:${PORT}`);
