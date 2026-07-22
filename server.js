@@ -53,11 +53,11 @@ function supabaseHeaders(extra = {}) {
 }
 
 // Insert one join request; returns the stored row.
-async function insertJoinRequest({ name, email, note }) {
+async function insertJoinRequest({ name, email, phone, note }) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
     method: 'POST',
     headers: supabaseHeaders({ Prefer: 'return=representation' }),
-    body: JSON.stringify([{ name, email, note: note || null, status: 'new' }]),
+    body: JSON.stringify([{ name, email, phone, note: note || null, status: 'new' }]),
   });
   if (!res.ok) {
     throw new Error(`Supabase insert failed (${res.status}): ${await res.text()}`);
@@ -70,7 +70,7 @@ async function insertJoinRequest({ name, email, note }) {
 async function listJoinRequests(limit = 200) {
   const url =
     `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}` +
-    `?select=id,name,email,note,status,created_at&order=created_at.desc&limit=${limit}`;
+    `?select=id,name,email,phone,note,status,created_at&order=created_at.desc&limit=${limit}`;
   const res = await fetch(url, { headers: supabaseHeaders() });
   if (!res.ok) {
     throw new Error(`Supabase read failed (${res.status}): ${await res.text()}`);
@@ -124,6 +124,7 @@ const readCodes = () => readJson(CODES_PATH, []);
 const writeCodes = (c) => writeJson(CODES_PATH, c);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^\+?[0-9()\-\s]{7,20}$/;
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 // Human-readable but hard-to-guess credentials.
@@ -172,6 +173,7 @@ app.get('/api/catalog', (req, res) => {
 app.post('/api/request', async (req, res) => {
   const name = String(req.body?.name || '').trim();
   const email = String(req.body?.email || '').trim().toLowerCase();
+  const phone = String(req.body?.phone || '').trim();
   const note = String(req.body?.note || '').trim().slice(0, 2000);
 
   if (!name) {
@@ -180,12 +182,15 @@ app.post('/api/request', async (req, res) => {
   if (!EMAIL_RE.test(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }
+  if (!PHONE_RE.test(phone)) {
+    return res.status(400).json({ error: 'Please enter a valid phone number.' });
+  }
   if (!supabaseReady) {
     return res.status(503).json({ error: 'Requests are temporarily unavailable. Please try again later.' });
   }
 
   try {
-    await insertJoinRequest({ name, email, note });
+    await insertJoinRequest({ name, email, phone, note });
     res.json({ message: "Thanks! Your request is in — we'll be in touch by email." });
   } catch (err) {
     console.error('join request failed:', err.message);
@@ -359,6 +364,7 @@ app.get('/admin', requireAdmin, async (req, res) => {
       return `<tr>
         <td>${escapeHtml(r.name || '')}</td>
         <td>${escapeHtml(r.email || '')}</td>
+        <td>${escapeHtml(r.phone || '')}</td>
         <td>${escapeHtml(r.note || '')}</td>
         <td><span class="pill ${escapeHtml(r.status || 'new')}">${escapeHtml(r.status || 'new')}</span></td>
         <td>${escapeHtml(when)}</td></tr>`;
@@ -422,8 +428,8 @@ app.get('/admin', requireAdmin, async (req, res) => {
 
   <h2>Join requests</h2>
   ${joinError ? `<p class="stats">${escapeHtml(joinError)}</p>` : ''}
-  <table><thead><tr><th>Name</th><th>Email</th><th>Note</th><th>Status</th><th>Received</th></tr></thead>
-  <tbody>${joinRows || '<tr><td colspan="5">No requests yet.</td></tr>'}</tbody></table>
+  <table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Note</th><th>Status</th><th>Received</th></tr></thead>
+  <tbody>${joinRows || '<tr><td colspan="6">No requests yet.</td></tr>'}</tbody></table>
 
   <h2>Generate activation codes</h2>
   <div class="gen">

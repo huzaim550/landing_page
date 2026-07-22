@@ -51,6 +51,7 @@ joinForm.addEventListener('submit', async (e) => {
   const msg = document.getElementById('joinMsg');
   const name = document.getElementById('joinName').value.trim();
   const email = document.getElementById('joinEmail').value.trim();
+  const phone = document.getElementById('joinPhone').value.trim();
   const note = document.getElementById('joinNote').value.trim();
   msg.className = 'form-msg';
 
@@ -64,6 +65,11 @@ joinForm.addEventListener('submit', async (e) => {
     msg.classList.add('error');
     return;
   }
+  if (!/^\+?[0-9()\-\s]{7,20}$/.test(phone)) {
+    msg.textContent = 'Please enter a valid phone number (digits, +, spaces and dashes only).';
+    msg.classList.add('error');
+    return;
+  }
 
   const btn = joinForm.querySelector('button');
   btn.disabled = true;
@@ -71,7 +77,7 @@ joinForm.addEventListener('submit', async (e) => {
     const res = await fetch('/api/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, note }),
+      body: JSON.stringify({ name, email, phone, note }),
     });
     const data = await res.json();
     if (res.ok) {
