@@ -213,7 +213,7 @@ function approvedEmail(r) {
 }
 
 // Sent when an admin marks a request Onboarded, carrying the customer's line.
-function onboardedEmail(r, username, password) {
+function onboardedEmail(r, username, password, serverUrl) {
   const row = (label, value) =>
     `<tr><td style="padding:8px 12px;color:#9a9a9a">${label}</td><td style="padding:8px 12px;color:#fff;font-family:ui-monospace,Menlo,monospace">${escapeHtml(value)}</td></tr>`;
   return {
@@ -222,7 +222,7 @@ function onboardedEmail(r, username, password) {
     html: emailShell('Welcome to Manzar', `<p>Hi ${escapeHtml(r.name || 'there')},</p>
       <p>Your line is live. Plug these details into any Xtream-compatible player:</p>
       <table style="border-collapse:collapse;background:#0f0f0f;border:1px solid #222;border-radius:8px;margin:8px 0 20px">
-        ${row('Server URL', XTREAM_SERVER_URL)}
+        ${row('Server URL', serverUrl)}
         ${row('Username', username)}
         ${row('Password', password)}
       </table>
@@ -419,6 +419,7 @@ app.post('/api/admin/requests/status', requireAdmin, async (req, res) => {
   const status = String(req.body?.status || '').trim();
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '').trim();
+  const serverUrl = String(req.body?.serverUrl || '').trim() || XTREAM_SERVER_URL;
   if (!id) return res.status(400).json({ error: 'Missing request id.' });
   if (!REQUEST_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${REQUEST_STATUSES.join(', ')}.` });
@@ -436,7 +437,7 @@ app.post('/api/admin/requests/status', requireAdmin, async (req, res) => {
     let emailNote = '';
     try {
       if (status === 'approved' || status === 'onboarded') {
-        const message = status === 'approved' ? approvedEmail(request) : onboardedEmail(request, username, password);
+        const message = status === 'approved' ? approvedEmail(request) : onboardedEmail(request, username, password, serverUrl);
         const sent = await sendEmail(message);
         console.log(`status→${status} for ${request.email}: email ${sent ? 'sent' : 'skipped (Resend not configured)'}`);
         if (!sent) {
@@ -587,6 +588,7 @@ app.get('/admin/requests', requireAdminPage, async (req, res) => {
     </table>
 <script>
   const TOKEN = ${JSON.stringify(String(ADMIN_TOKEN))};
+  const SERVER_URL = ${JSON.stringify(String(XTREAM_SERVER_URL))};
   async function post(url, body){
     const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN}, body:JSON.stringify(body)});
     const d = await r.json().catch(()=>({}));
@@ -600,12 +602,14 @@ app.get('/admin/requests', requireAdminPage, async (req, res) => {
     location.reload();
   }
   async function onboard(id){
+    const serverUrl = prompt('Xtream server URL for this customer:', SERVER_URL);
+    if(serverUrl === null) return;
     const username = prompt('Xtream username for this customer:');
     if(username === null) return;
     const password = prompt('Xtream password for this customer:');
     if(password === null) return;
-    if(!username.trim() || !password.trim()){ alert('Username and password are both required to onboard.'); return; }
-    const d = await post('/api/admin/requests/status', {id, status:'onboarded', username:username.trim(), password:password.trim()});
+    if(!serverUrl.trim() || !username.trim() || !password.trim()){ alert('Server URL, username and password are all required to onboard.'); return; }
+    const d = await post('/api/admin/requests/status', {id, status:'onboarded', username:username.trim(), password:password.trim(), serverUrl:serverUrl.trim()});
     if(!d) return;
     if(d.emailNote) alert(d.emailNote);
     location.reload();
